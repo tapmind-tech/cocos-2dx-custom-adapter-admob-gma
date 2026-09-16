@@ -1,0 +1,1 @@
+# cocos-2dx-custom-adapter-admob-gma
