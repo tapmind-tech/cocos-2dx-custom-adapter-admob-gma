@@ -1,0 +1,17 @@
+{
+  "name": "ads_admob_cocos2dx",
+  "version": "1.0.1",
+  "description": "Installer that wires the TapMind AdMob mediation adapter into a Cocos2d-x 4.0 (CMake) project's proj.android and proj.ios_mac folders.",
+  "main": "inject.js",
+  "bin": {
+    "ads-admob-inject": "inject.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node test/inject.test.js"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}

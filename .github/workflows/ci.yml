@@ -1,0 +1,111 @@
+# GitHub Actions for ads_admob_cocos2dx (Cocos2d-x AdMob installer)
+#
+# Security / verify only — no publish stage.
+#
+# Flow:
+#   PR  dev → main     → merge_gate + analyze_and_test + suspicious_code_scan
+#   PR  *   → dev      → same jobs (forks / non-collaborators fail merge_gate)
+#   Manual dispatch    → verify jobs (merge_gate is a no-op)
+#
+# Merge into main is blocked when any required check fails. That still needs
+# GitHub branch rulesets — see GITHUB_SETUP.md (Actions cannot lock main by itself).
+
+name: CI (verify)
+
+on:
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  merge_gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce collaborator-only PRs and main ← dev
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          THIS_REPO: ${{ github.repository }}
+          ASSOCIATION: ${{ github.event.pull_request.author_association }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "workflow_dispatch — merge gate skipped."
+            exit 0
+          fi
+
+          echo "PR ${HEAD_REF} → ${BASE_REF}"
+          echo "Head repo: ${HEAD_REPO}"
+          echo "This repo: ${THIS_REPO}"
+          echo "Author association: ${ASSOCIATION}"
+
+          if [ "${HEAD_REPO}" != "${THIS_REPO}" ]; then
+            echo "::error::Fork PRs are not accepted. Only collaborators on this repository may open pull requests."
+            exit 1
+          fi
+
+          case "${ASSOCIATION}" in
+            OWNER|MEMBER|COLLABORATOR)
+              echo "Author is allowed (${ASSOCIATION})."
+              ;;
+            *)
+              echo "::error::Only repository collaborators (and org members/owners) can open pull requests. Got: ${ASSOCIATION}"
+              exit 1
+              ;;
+          esac
+
+          if [ "${BASE_REF}" = "main" ] && [ "${HEAD_REF}" != "dev" ]; then
+            echo "::error::PRs into main are only allowed from the dev branch. Got source branch '${HEAD_REF}'."
+            exit 1
+          fi
+
+          echo "Merge gate passed."
+
+  analyze_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Package sanity + syntax check
+        run: |
+          set -euo pipefail
+          node -e "
+            const pkg = require('./ads_admob_cocos2dx/package.json');
+            if (!pkg.name) throw new Error('package.json missing name');
+            if (!pkg.version) throw new Error('package.json missing version');
+            if (!pkg.main) throw new Error('package.json missing main');
+            console.log('Package:', pkg.name, '@', pkg.version);
+            console.log('Main:', pkg.main);
+          "
+          test -f ads_admob_cocos2dx/inject.js
+          test -f ads_admob_cocos2dx/package.json
+          node --check ads_admob_cocos2dx/inject.js
+          if [ -f ads_admob_cocos2dx/test/inject.test.js ]; then
+            (cd ads_admob_cocos2dx && npm test)
+          else
+            echo "No unit tests found — skipping npm test."
+          fi
+
+  suspicious_code_scan:
+    runs-on: ubuntu-latest
+    needs: [analyze_and_test]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Suspicious code scan
+        run: bash .github/scripts/suspicious_code_scan.sh
