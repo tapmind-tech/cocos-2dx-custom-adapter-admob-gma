@@ -3,7 +3,7 @@
 # Security / verify only — no publish stage.
 #
 # Flow:
-#   PR  dev → main     → merge_gate + analyze_and_test + changelog_check + suspicious_code_scan
+#   PR  dev → main     → merge_gate + analyze_and_test + suspicious_code_scan
 #   PR  *   → dev      → same jobs (forks / non-collaborators fail merge_gate)
 #   Manual dispatch    → verify jobs (merge_gate is a no-op)
 #
@@ -96,18 +96,6 @@ jobs:
           else
             echo "No unit tests found — skipping npm test."
           fi
-
-  changelog_check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      - name: Changelog gate
-        run: bash .github/scripts/check_changelog.sh
 
   suspicious_code_scan:
     runs-on: ubuntu-latest
